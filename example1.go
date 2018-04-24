@@ -28,5 +28,6 @@ func main() {
 	//StructTest()
 	//ErrorPrint()
 	//fmt.Println(ArgFunc(1,2,3,4,5,6))
-	HandleCore()
+	//HandleCore()
+	MethodTest()
 }

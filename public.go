@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	//	"strings"
-	"os"
 	"log"
+	"os"
 	"runtime"
-//	"bytes"
+	//	"bytes"
+	"errors"
 )
 
 //返回指针安全
@@ -16,9 +17,10 @@ func RePoint() *int {
 	return &v
 }
 
-func Incr() func () int {
+//匿名函数实现的闭包
+func Incr() func() int {
 	x := 0
-	return func () int {
+	return func() int {
 		x++
 		return x
 	}
@@ -100,22 +102,30 @@ func RemoveStudent(id int, class Class) Class {
 func PrintStudent(class Class) {
 	incr := Incr()
 	var ret int
-	flag := true
-	for count:= 0; count < len(class.Student); {
+	for count := 0; count < len(class.Student); {
+		ret = incr()
 		for _, value := range class.Student {
-			if flag {
-				ret = incr()
-			}	
 			if value.S_id == ret {
 				fmt.Printf("id=%d name=%s\n", value.S_id, value.Name)
 				count++
-				flag = true
-				continue
+				break
 			}
-			flag = false
 		}
 	}
 }
+
+//nil是一个合法的方法接收者
+func (s *Students) SetName(name string) error {
+	if s == nil {
+		return errors.New("method receiver is nil")
+	}
+	(*s).Name = name
+	return nil
+}
+func (s Students) GetName() string {
+	return s.Name
+}
+
 func StructTest() {
 	class := CreateClass(1)
 	class = AddStudent(1, "name1", class)
@@ -126,10 +136,41 @@ func StructTest() {
 	PrintStudent(class)
 
 	class = RemoveStudent(3, class)
-	class = RemoveStudent(4, class)
+	//class = RemoveStudent(4, class)
 	PrintStudent(class)
 }
 
+func MethodTest() {
+	s := Students{1, "aaa"}
+	//此时方法接收者形参为T类型指针，实参为T类型,此时编译器默认进行&T的隐式转换
+	//另一种方式(&s).SetName("bbbb")
+	//编译器默认隐式转换同样适用于*T到T的转换
+	s.SetName("bbbb")
+	fmt.Printf("name = %s\n", s.GetName())
+	//方法变量
+	set := s.SetName
+	get := s.GetName //此时已绑定该接收者，因此通过set更新接收者对其无效，get返回的是此时绑定接收者s的值
+	set("cccc")
+	fmt.Printf("name = %s\n", s.GetName())
+	fmt.Printf("name = %s\n", get())
+	//方法表达式
+
+	fset := (*Students).SetName
+	fget := Students.GetName
+
+	fset(&s, "dddd")
+	fmt.Printf("name = %s\n", fget(s))
+
+	//nil
+	var ps *Students
+	err := ps.SetName("cccc")
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+	fmt.Printf("name = %s\n", ps.GetName())
+}
+
+//错误输出
 func ErrorPrint() {
 	fmt.Fprintf(os.Stderr, "print error msg\n")
 	err := fmt.Errorf("print error msg")
@@ -137,37 +178,41 @@ func ErrorPrint() {
 	log.Fatalf("print error msg\n")
 }
 
-func ArgFunc(args ...int) int{
+//边长函数
+func ArgFunc(args ...int) int {
 	sum := 0
-	for _,val := range args {
-		sum += val	
+	for _, val := range args {
+		sum += val
 	}
 	return sum
 }
 
-func HandleCore(){
+//defer 延迟调用
+//panic 引发运行时错误，默认退出程序
+//recover:从运行时错误恢复，正常运行
+func HandleCore() {
 	type core struct{}
 
-	defer func(){
-		switch p:=recover(); p {
-			case nil:
-				break
-			case core{}:
-				fmt.Fprintf(os.Stderr, "core\n")
-				func(){
-					var buf [4096]byte
-					n := runtime.Stack(buf[:], false)
-					os.Stdout.Write(buf[:n])
-				}()
-				break
-			default:
-				panic(p)
-				break
+	defer func() {
+		switch p := recover(); p {
+		case nil:
+			break
+		case core{}: //捕捉特定类型运行时错误，然后恢复
+			fmt.Fprintf(os.Stderr, "core\n")
+			func() {
+				var buf [4096]byte
+				n := runtime.Stack(buf[:], false) //保存当前运行栈信息
+				os.Stdout.Write(buf[:n])
+			}()
+			break
+		default:
+			panic(p) //其他异常执行重新引发，执行默认处理操作
+			break
 		}
 	}()
 
 	fmt.Println("not core")
 	fmt.Println("set core")
-	panic(core{})
+	panic(core{}) //引发一个特定类型的运行时错误
 	//panic("core exit")
 }
